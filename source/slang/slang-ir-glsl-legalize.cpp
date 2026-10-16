@@ -427,6 +427,24 @@ struct OuterParamInfoLink
     OuterParamInfoLink* next;
 };
 
+/// Return the innermost decoration of type `T` along the access chain `outerParamInfo`, or
+/// null if no link carries one. A struct field's decorations live on its key, so a field link
+/// is looked up through `IRStructField::getKey()`. Searching innermost-first lets a decoration
+/// on a field override one on the enclosing parameter.
+template<typename T>
+static T* findAccessChainDecoration(OuterParamInfoLink* outerParamInfo)
+{
+    for (; outerParamInfo; outerParamInfo = outerParamInfo->next)
+    {
+        auto decorParent = outerParamInfo->outerParam;
+        if (auto field = as<IRStructField>(decorParent))
+            decorParent = field->getKey();
+        if (auto decoration = decorParent->findDecoration<T>())
+            return decoration;
+    }
+    return nullptr;
+}
+
 GLSLSystemValueInfo* getGLSLSystemValueInfo(
     GLSLLegalizationContext* context,
     CodeGenContext* codeGenContext,
@@ -1044,23 +1062,10 @@ void createVarLayoutForLegalizedGlobalParam(
     IRVarLayout* varLayout = varLayoutBuilder.build();
     builder->addLayoutDecoration(globalParam, varLayout);
 
-    // Traverse the entire access chain for the current leaf var and see if
-    // there are interpolation mode decorations along the way.
-    // Make sure we respect the decoration on the inner most node.
-    // So that the decoration on a struct field overrides the outer decoration
-    // on a parameter of the struct type.
-    for (; outerParamInfo; outerParamInfo = outerParamInfo->next)
+    if (auto interpolationModeDecor =
+            findAccessChainDecoration<IRInterpolationModeDecoration>(outerParamInfo))
     {
-        auto paramInfo = outerParamInfo->outerParam;
-        auto decorParent = paramInfo;
-        if (auto field = as<IRStructField>(decorParent))
-            decorParent = field->getKey();
-        if (auto interpolationModeDecor =
-                decorParent->findDecoration<IRInterpolationModeDecoration>())
-        {
-            builder->addInterpolationModeDecoration(globalParam, interpolationModeDecor->getMode());
-            break;
-        }
+        builder->addInterpolationModeDecoration(globalParam, interpolationModeDecor->getMode());
     }
 
     if (declarator && declarator->flavor == GlobalVaryingDeclarator::Flavor::meshOutputPrimitives)
