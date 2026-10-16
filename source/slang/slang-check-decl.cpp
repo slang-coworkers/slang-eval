@@ -7522,6 +7522,43 @@ static void removeStaticLookupItems(LookupResult& lookupResult)
     }
 }
 
+// Returns true if `firstArg`, the synthesized argument for the first parameter of the static
+// requirement `requiredMemberDeclRef`, can be the implicit `this` of a non-static method found on
+// the conforming type.
+//
+// The synthesized call attaches `firstArg` as the base of member candidates that were looked up
+// in the conforming type, and nothing re-checks the base type against those members. The
+// argument must therefore have the conforming type. Consider this example:
+//
+//      interface IHit
+//      {
+//          float value() { return 0.0; }
+//          static float value(Packed p) { return This.unpack(p).value(); }
+//      }
+//      struct Hit : IHit { override float value() { ... } }
+//
+// For the static `value(Packed)`, binding `p` as the receiver of `Hit::value()` would produce
+// the ill-typed call `Hit::value(p)` instead of falling back to the default implementation.
+//
+// Requirements declared with a direct function type (the autodiff `__associatedfunc` members such
+// as `fwd_diff`) are exempt. They belong to function interfaces like
+// `IForwardDifferentiable<FType>`, where the conforming type is the function itself, so the
+// receiver of a method's derivative never has the conforming type.
+static bool canBindFirstArgAsReceiver(
+    ConformanceCheckingContext* context,
+    DeclRef<FuncDecl> requiredMemberDeclRef,
+    Expr* firstArg)
+{
+    if (hasDirectFuncType(requiredMemberDeclRef))
+        return true;
+
+    auto firstArgType = firstArg->type.type;
+    SLANG_ASSERT(firstArgType && context->conformingType);
+    return unwrapModifiedType(firstArgType)
+        ->getCanonicalType()
+        ->equals(unwrapModifiedType(context->conformingType)->getCanonicalType());
+}
+
 // Returns true if declRef points to an interface method requirement that has a default
 // implementation.
 HasInterfaceDefaultImplModifier* hasDefaultImpl(DeclRef<Decl> declRef)
@@ -7666,7 +7703,8 @@ bool SemanticsVisitor::trySynthesizeMethodRequirementWitness(
         // Synthesized:
         //      static int $__syn_method(MyStruct val, int x) { return val.method(x); }
         //
-        if (!baseOverloadedExpr->lookupResult2.isValid() && synArgs.getCount() > 0)
+        if (!baseOverloadedExpr->lookupResult2.isValid() && synArgs.getCount() > 0 &&
+            canBindFirstArgAsReceiver(context, requiredMemberDeclRef, synArgs[0]))
         {
             // Restore the full lookup result and keep only non-static items.
             baseOverloadedExpr->lookupResult2 = lookupResult;
