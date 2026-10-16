@@ -9591,9 +9591,16 @@ Val* SemanticsExprVisitor::checkTypeModifier(Modifier* modifier, Type* type)
         // We're already diagnosing on HLSLVolatileModifier.
         return nullptr;
     }
+    else if (!as<TypeModifier>(modifier))
+    {
+        // When a type is parsed on its own, the parser attaches all of its leading modifiers to
+        // the type expression and leaves classification to us, so a declaration modifier written
+        // in type position (`property override float3 X`) reaches this point as user error.
+        getSink()->diagnose(Diagnostics::ModifierNotAllowed{.modifier = modifier});
+        return nullptr;
+    }
     else
     {
-        // TODO: more complete error message here
         getSink()->diagnose(Diagnostics::Unexpected{
             .message = "unknown type modifier in semantic checking",
             .location = modifier->loc});
