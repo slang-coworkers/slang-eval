@@ -32,6 +32,10 @@ using namespace Slang;
 //      dispatch must produce (including a zero count for an unreached
 //      branch), for both the default uint64 and opt-down uint32 counter
 //      widths.
+//
+// A second shader runs the same dispatch under `-trace-branch-coverage` and
+// checks the exact true/false arm counts of the expression-level branch
+// sites: scalar `?:`, short-circuit `&&` and `||`, and a mixed chain.
 
 namespace
 {
@@ -94,6 +98,24 @@ void computeMain(uint3 tid : SV_DispatchThreadID)
 static const uint32_t kThreadCount = 4;
 static const uint32_t kLoopTripCount = 3;
 
+// Each expression-level branch site below decides on a condition whose value
+// differs across the four threads, so every arm has a known exact count.
+static const char* const kBranchExpressionShaderSource = R"(
+RWStructuredBuffer<uint> outputBuffer;
+
+[shader("compute")]
+[numthreads(4, 1, 1)]
+void computeMain(uint3 tid : SV_DispatchThreadID)
+{
+    uint t = tid.x;
+    uint picked = (t == 3u) ? 10u : 20u;
+    bool both = (t != 0u) && (t != 2u);
+    bool either = (t == 1u) || (t == 2u);
+    bool mixed = ((t != 0u) && (t != 1u)) || (t == 0u);
+    outputBuffer[t] = picked + uint(both) + uint(either) + uint(mixed);
+}
+)";
+
 // Return the 1-based line number of the first source line containing
 // `needle`, or 0 if not found. Locating asserted lines by content keeps the
 // expected-count table valid when the shader source is edited.
@@ -136,18 +158,36 @@ static void diagnoseIfNeeded(slang::IBlob* diagnostics, const char* label)
     }
 }
 
-// Compile the test shader with coverage tracing at the requested counter
-// width, execute one 4-thread group in-process with a host-bound counter
-// buffer, and validate both the kernel's output values and the exact
-// per-line coverage counts.
-static void runCoverageCpuRuntimeTest(slang::IGlobalSession* globalSession, int counterByteWidth)
+struct CoverageCpuDispatch
+{
+    uint32_t outputValues[kThreadCount] = {};
+    List<uint8_t> counterBytes;
+    int counterByteWidth = 0;
+    ComPtr<slang::IMetadata> metadata;
+    slang::ICoverageTracingMetadata* coverage = nullptr;
+
+    uint64_t readCounterForEntry(const slang::CoverageEntryInfo& entry) const
+    {
+        return readCounter(counterBytes.getBuffer(), counterByteWidth, entry.counterIndex);
+    }
+};
+
+// Compile `source` with the given coverage options at the requested counter
+// width, then execute one 4-thread group in-process with a host-bound
+// counter buffer, following the documented CPU binding recipe.
+static void dispatchCoverageShader(
+    slang::IGlobalSession* globalSession,
+    const char* source,
+    slang::CompilerOptionName coverageMode,
+    int counterByteWidth,
+    CoverageCpuDispatch& outDispatch)
 {
     slang::TargetDesc targetDesc = {};
     targetDesc.format = SLANG_SHADER_HOST_CALLABLE;
     targetDesc.profile = globalSession->findProfile("sm_5_0");
 
     slang::CompilerOptionEntry coverageOptions[2] = {};
-    coverageOptions[0].name = slang::CompilerOptionName::TraceCoverage;
+    coverageOptions[0].name = coverageMode;
     coverageOptions[0].value.kind = slang::CompilerOptionValueKind::Int;
     coverageOptions[0].value.intValue0 = 1;
     coverageOptions[1].name = slang::CompilerOptionName::TraceCoverageCounterByteWidth;
@@ -167,7 +207,7 @@ static void runCoverageCpuRuntimeTest(slang::IGlobalSession* globalSession, int 
     auto module = session->loadModuleFromSourceString(
         "coverageCpuRuntime",
         "coverageCpuRuntime.slang",
-        kShaderSource,
+        source,
         diagnostics.writeRef());
     diagnoseIfNeeded(diagnostics, "loadModule");
     SLANG_CHECK_ABORT(module != nullptr);
@@ -200,17 +240,20 @@ static void runCoverageCpuRuntimeTest(slang::IGlobalSession* globalSession, int 
     // Discover the hidden coverage buffer through the synthetic-resource
     // metadata contract, exactly the way a direct CPU host would.
     diagnostics.setNull();
-    ComPtr<slang::IMetadata> metadata;
     SLANG_CHECK_ABORT(
-        linked->getEntryPointMetadata(0, 0, metadata.writeRef(), diagnostics.writeRef()) ==
-        SLANG_OK);
+        linked->getEntryPointMetadata(
+            0,
+            0,
+            outDispatch.metadata.writeRef(),
+            diagnostics.writeRef()) == SLANG_OK);
 
-    auto coverage = (slang::ICoverageTracingMetadata*)metadata->castAs(
+    auto coverage = (slang::ICoverageTracingMetadata*)outDispatch.metadata->castAs(
         slang::ICoverageTracingMetadata::getTypeGuid());
     SLANG_CHECK_ABORT(coverage != nullptr);
-    auto syntheticResources = (slang::ISyntheticResourceMetadata*)metadata->castAs(
+    auto syntheticResources = (slang::ISyntheticResourceMetadata*)outDispatch.metadata->castAs(
         slang::ISyntheticResourceMetadata::getTypeGuid());
     SLANG_CHECK_ABORT(syntheticResources != nullptr);
+    outDispatch.coverage = coverage;
 
     const uint32_t counterCount = coverage->getCounterCount();
     SLANG_CHECK_ABORT(counterCount > 0);
@@ -235,17 +278,16 @@ static void runCoverageCpuRuntimeTest(slang::IGlobalSession* globalSession, int 
     slang::CoverageBufferInfo bufferInfo;
     SLANG_CHECK_ABORT(coverage->getBufferInfo(&bufferInfo) == SLANG_OK);
     SLANG_CHECK_ABORT(bufferInfo.elementByteWidth == uint32_t(counterByteWidth));
-    const int reportedCounterByteWidth = int(bufferInfo.elementByteWidth);
+    outDispatch.counterByteWidth = int(bufferInfo.elementByteWidth);
 
     // The kernel executes in-process, so host and kernel agree on pointer
     // width and the buffer view can be patched in directly.
-    uint32_t outputValues[kThreadCount] = {};
     CpuStructuredBufferView outputView;
-    outputView.data = outputValues;
+    outputView.data = outDispatch.outputValues;
     outputView.count = kThreadCount;
 
-    List<uint8_t> counterBytes;
-    counterBytes.setCount(Index(counterCount) * reportedCounterByteWidth);
+    auto& counterBytes = outDispatch.counterBytes;
+    counterBytes.setCount(Index(counterCount) * outDispatch.counterByteWidth);
     memset(counterBytes.getBuffer(), 0, counterBytes.getCount());
     CpuStructuredBufferView coverageView;
     coverageView.data = counterBytes.getBuffer();
@@ -271,10 +313,31 @@ static void runCoverageCpuRuntimeTest(slang::IGlobalSession* globalSession, int 
     varyingInput.endGroupID.z = 1;
     computeFunc(&varyingInput, nullptr, globalParams.getBuffer());
 
+    for (uint32_t i = 0; i < coverage->getEntryCount(); ++i)
+    {
+        slang::CoverageEntryInfo entry;
+        SLANG_CHECK_ABORT(coverage->getEntryInfo(i, &entry) == SLANG_OK);
+        SLANG_CHECK_ABORT(entry.counterIndex < counterCount);
+    }
+}
+
+// Execute the line-coverage shader at the requested counter width and
+// validate both the kernel's output values and the exact per-line coverage
+// counts.
+static void runCoverageCpuRuntimeTest(slang::IGlobalSession* globalSession, int counterByteWidth)
+{
+    CoverageCpuDispatch dispatch;
+    dispatchCoverageShader(
+        globalSession,
+        kShaderSource,
+        slang::CompilerOptionName::TraceCoverage,
+        counterByteWidth,
+        dispatch);
+
     // The instrumented kernel must still compute correct results:
     // outputBuffer[t] = t + (0 + 1 + 2).
     for (uint32_t t = 0; t < kThreadCount; ++t)
-        SLANG_CHECK(outputValues[t] == t + 3);
+        SLANG_CHECK(dispatch.outputValues[t] == t + 3);
 
     // Expected exact execution counts per single-statement source line.
     struct ExpectedLine
@@ -289,6 +352,7 @@ static void runCoverageCpuRuntimeTest(slang::IGlobalSession* globalSession, int 
         {"outputBuffer[tid.x] = value;", kThreadCount},
     };
 
+    auto coverage = dispatch.coverage;
     for (const auto& expected : expectedLines)
     {
         const uint32_t line = findLineContaining(kShaderSource, expected.statement);
@@ -308,13 +372,117 @@ static void runCoverageCpuRuntimeTest(slang::IGlobalSession* globalSession, int 
                 continue;
             if (entry.line != line)
                 continue;
-            SLANG_CHECK_ABORT(entry.counterIndex < counterCount);
             ++entriesOnLine;
-            totalCount +=
-                readCounter(counterBytes.getBuffer(), reportedCounterByteWidth, entry.counterIndex);
+            totalCount += dispatch.readCounterForEntry(entry);
         }
         SLANG_CHECK(entriesOnLine == 1);
         SLANG_CHECK(totalCount == expected.expectedCount);
+    }
+}
+
+// Execute the branch-expression shader under `-trace-branch-coverage` and
+// validate the exact true/false arm counts of every expression-level branch
+// site. A site is identified by the source line and column of the operand
+// that decides it: the `?:` condition, or the left operand of `&&`/`||`.
+static void runCoverageCpuRuntimeBranchExpressionTest(
+    slang::IGlobalSession* globalSession,
+    int counterByteWidth)
+{
+    CoverageCpuDispatch dispatch;
+    dispatchCoverageShader(
+        globalSession,
+        kBranchExpressionShaderSource,
+        slang::CompilerOptionName::TraceBranchCoverage,
+        counterByteWidth,
+        dispatch);
+
+    // outputBuffer[t] = picked + both + either + mixed:
+    // t=0: 20+0+0+1, t=1: 20+1+1+0, t=2: 20+0+1+1, t=3: 10+1+0+1.
+    const uint32_t expectedOutput[kThreadCount] = {21, 22, 22, 12};
+    for (uint32_t t = 0; t < kThreadCount; ++t)
+        SLANG_CHECK(dispatch.outputValues[t] == expectedOutput[t]);
+
+    // `lineNeedle` finds the source line and `operandNeedle` the deciding
+    // operand on it; the mixed chain has two sites on one line, so the
+    // column is what tells them apart.
+    struct ExpectedSite
+    {
+        const char* lineNeedle;
+        const char* operandNeedle;
+        uint64_t trueCount;
+        uint64_t falseCount;
+    };
+    const ExpectedSite expectedSites[] = {
+        // `?:`: only t=3 takes the true arm.
+        {"uint picked =", "(t == 3u)", 1, 3},
+        // `&&`: the right operand runs for t=1,2,3.
+        {"bool both =", "(t != 0u)", 3, 1},
+        // `||`: the right operand runs for t=0,2,3.
+        {"bool either =", "(t == 1u)", 1, 3},
+        // Inner `&&` of the mixed chain: its right operand runs for t=1,2,3.
+        {"bool mixed =", "(t != 0u)", 3, 1},
+        // Outer `||`: its left operand `(t != 0u) && (t != 1u)` is true
+        // only for t=2,3, so the right operand runs for t=0,1.
+        {"bool mixed =", "((t != 0u)", 2, 2},
+    };
+
+    auto coverage = dispatch.coverage;
+    uint32_t branchEntryCount = 0;
+    for (uint32_t i = 0; i < coverage->getEntryCount(); ++i)
+    {
+        slang::CoverageEntryInfo entry;
+        SLANG_CHECK_ABORT(coverage->getEntryInfo(i, &entry) == SLANG_OK);
+        if (entry.kind == slang::CoverageEntryKind::Branch)
+            ++branchEntryCount;
+    }
+    SLANG_CHECK(branchEntryCount == 2 * SLANG_COUNT_OF(expectedSites));
+
+    for (const auto& expected : expectedSites)
+    {
+        const uint32_t line =
+            findLineContaining(kBranchExpressionShaderSource, expected.lineNeedle);
+        SLANG_CHECK_ABORT(line != 0);
+        const char* lineText = strstr(kBranchExpressionShaderSource, expected.lineNeedle);
+        while (lineText > kBranchExpressionShaderSource && lineText[-1] != '\n')
+            --lineText;
+        const char* operand = strstr(lineText, expected.operandNeedle);
+        SLANG_CHECK_ABORT(operand != nullptr);
+        const uint32_t column = uint32_t(operand - lineText) + 1;
+
+        uint32_t trueArms = 0;
+        uint32_t falseArms = 0;
+        uint32_t siteID = 0;
+        uint64_t trueCount = 0;
+        uint64_t falseCount = 0;
+        for (uint32_t i = 0; i < coverage->getEntryCount(); ++i)
+        {
+            slang::CoverageEntryInfo entry;
+            SLANG_CHECK_ABORT(coverage->getEntryInfo(i, &entry) == SLANG_OK);
+            if (entry.kind != slang::CoverageEntryKind::Branch)
+                continue;
+            if (entry.line != line || entry.startColumn != column)
+                continue;
+            // Both arms of one site share a branch-site ID, which is what
+            // lets an LCOV writer group them into one `BRDA:` block.
+            if (siteID == 0)
+                siteID = entry.branchSiteID;
+            SLANG_CHECK(entry.branchSiteID == siteID);
+            if (entry.branchArmKind == slang::CoverageBranchArmKind::TrueArm)
+            {
+                ++trueArms;
+                trueCount += dispatch.readCounterForEntry(entry);
+            }
+            else if (entry.branchArmKind == slang::CoverageBranchArmKind::FalseArm)
+            {
+                ++falseArms;
+                falseCount += dispatch.readCounterForEntry(entry);
+            }
+        }
+        SLANG_CHECK(siteID != 0);
+        SLANG_CHECK(trueArms == 1);
+        SLANG_CHECK(falseArms == 1);
+        SLANG_CHECK(trueCount == expected.trueCount);
+        SLANG_CHECK(falseCount == expected.falseCount);
     }
 }
 
@@ -358,4 +526,5 @@ SLANG_UNIT_TEST(coverageCpuRuntimeDispatch)
     // the opt-down width exercises `_slang_atomic_add_u32`.
     runCoverageCpuRuntimeTest(globalSession, 8);
     runCoverageCpuRuntimeTest(globalSession, 4);
+    runCoverageCpuRuntimeBranchExpressionTest(globalSession, 8);
 }
