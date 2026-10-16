@@ -35,6 +35,10 @@ target):
 - **OptiX 7.x** — ordinary ray tracing with `TraceRay` (which lowers to `optixTrace`) continues to
   work; SER is unavailable.
 
+On CUDA, `GetGeometryIndex` returns an OptiX SBT GAS index, and with OptiX 9.0 and later `MakeHit` / `MakeMotionHit`
+do not use their hit-identifying arguments. See "Geometry index" in the
+[CUDA target documentation](cuda-target.md#geometry-index).
+
 ## Links
 
 - [SER white paper for NVAPI](https://developer.nvidia.com/sites/default/files/akamai/gameworks/ser-whitepaper.pdf)
