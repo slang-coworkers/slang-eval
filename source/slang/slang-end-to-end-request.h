@@ -337,7 +337,8 @@ public:
     /// If a container format has been specified produce a container (stored in m_containerBlob)
     SlangResult maybeCreateContainer();
     /// If a container has been constructed and the filename/path has contents will try to write
-    /// the container contents to the file
+    /// the container contents to the file. Every failure it returns is also diagnosed, because
+    /// `generateOutput()` reports errors only through the diagnostic sink.
     SlangResult maybeWriteContainer(const String& fileName);
 
     Linkage* getLinkage() { return m_linkage; }

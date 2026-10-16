@@ -1119,12 +1119,22 @@ SlangResult EndToEndCompileRequest::maybeWriteContainer(const String& fileName)
 
     // Filter the containerArtifact into things that can be written
     ComPtr<IArtifact> writeArtifact;
-    SLANG_RETURN_ON_FAIL(ArtifactContainerUtil::filter(m_containerArtifact, writeArtifact));
+    SlangResult res = ArtifactContainerUtil::filter(m_containerArtifact, writeArtifact);
+    if (SLANG_FAILED(res))
+    {
+        getSink()->diagnose(Diagnostics::CannotAccessAsBlob{});
+        return res;
+    }
 
     // Only write if there is something to write
     if (writeArtifact)
     {
-        SLANG_RETURN_ON_FAIL(ArtifactContainerUtil::writeContainer(writeArtifact, fileName));
+        res = ArtifactContainerUtil::writeContainer(writeArtifact, fileName);
+        if (SLANG_FAILED(res))
+        {
+            getSink()->diagnose(Diagnostics::CannotWriteOutputFile{.path = fileName});
+            return res;
+        }
     }
 
     return SLANG_OK;
