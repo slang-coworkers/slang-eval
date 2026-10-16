@@ -10567,15 +10567,18 @@ struct SPIRVEmitContext : public SourceEmitterBase, public SPIRVEmitSharedContex
                 workList.add(inst);
         };
 
-        // Seed from every `precise`-decorated value inside a function body, then walk backward
-        // to a fixpoint. Propagation stays within a function: a value computed in a callee is
-        // reached only if that callee is inlined before emit. Making a called function's body
-        // precise for one precise call site -- without penalizing its other, non-precise
-        // callers -- would require specializing the callee, which is out of scope here. (A
-        // `precise` global variable is likewise not covered: by the time the SPIR-V emitter
-        // runs, its decoration is no longer reachable from the module's global insts.)
+        // Seed from every `precise`-decorated value inside a function body and from every
+        // `precise`-decorated global, then walk backward to a fixpoint. The global seeds cover
+        // entry-point outputs: GLSL legalization replaces `out precise float4 pos :
+        // SV_Position` (or a `precise` output struct field) with a global output variable that
+        // carries the decoration, while the values stored into it carry none of their own.
+        // Propagation otherwise stays within a function: a value computed in a callee is
+        // reached only if that callee is inlined before emit.
         for (auto globalInst : m_irModule->getGlobalInsts())
         {
+            if (globalInst->findDecoration<IRPreciseDecoration>())
+                enqueue(globalInst);
+
             auto func = as<IRGlobalValueWithCode>(globalInst);
             if (!func)
                 continue;
@@ -10610,7 +10613,8 @@ struct SPIRVEmitContext : public SourceEmitterBase, public SPIRVEmitSharedContex
             // from it (`value.x` / `arr[i]` lower to a store through a `getElementPtr` /
             // `fieldAddress`), so also enqueue those derived pointers -- each is itself a
             // pointer and gets the same treatment, so a store behind any depth of
-            // element/field access is reached.
+            // element/field access is reached. A multi-component swizzle write such as
+            // `outPos.xyz = ...` stays a single `swizzledStore` into the vector pointer.
             if (as<IRPtrTypeBase>(inst->getDataType()))
             {
                 for (auto use = inst->firstUse; use; use = use->nextUse)
@@ -10620,6 +10624,16 @@ struct SPIRVEmitContext : public SourceEmitterBase, public SPIRVEmitSharedContex
                     {
                         if (store->getPtr() == inst)
                             enqueue(store->getVal());
+                    }
+                    else if (auto swizzledStore = as<IRSwizzledStore>(user))
+                    {
+                        if (swizzledStore->getDest() == inst)
+                            enqueue(swizzledStore->getSource());
+                    }
+                    else if (auto matrixSwizzleStore = as<IRMatrixSwizzleStore>(user))
+                    {
+                        if (matrixSwizzleStore->getDest() == inst)
+                            enqueue(matrixSwizzleStore->getSource());
                     }
                     else if (
                         as<IRPtrTypeBase>(user->getDataType()) && user->getOperandCount() > 0 &&

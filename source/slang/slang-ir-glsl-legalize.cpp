@@ -1034,6 +1034,32 @@ GLSLSystemValueInfo* getGLSLSystemValueInfo(
     return nullptr;
 }
 
+/// Mark the legalized global `globalParam` as `precise` if it replaces an entry-point
+/// output that is declared `precise` anywhere along its access chain `outerParamInfo`.
+///
+/// Consider:
+///
+///     struct VSOut { precise float4 pos : SV_Position; float4 color : COLOR; };
+///     void main(out precise VSOut o);
+///
+/// The `pos` leaf is precise through its own field key and the `color` leaf through the
+/// enclosing `out precise` parameter, so any precise link applies, not only the innermost
+/// one. Once this pass replaces the parameter with a global, the global is the output's
+/// storage, so it must carry the decoration for the SPIR-V emitter's `NoContraction`
+/// propagation and the GLSL `precise` qualifier to see it. Inputs are skipped because their
+/// values are not computed by this shader.
+static void maybeAddPreciseDecorationForOutputVarying(
+    IRBuilder* builder,
+    IRInst* globalParam,
+    LayoutResourceKind kind,
+    OuterParamInfoLink* outerParamInfo)
+{
+    if (kind != LayoutResourceKind::VaryingOutput)
+        return;
+    if (findAccessChainDecoration<IRPreciseDecoration>(outerParamInfo))
+        builder->addSimpleDecoration<IRPreciseDecoration>(globalParam);
+}
+
 void createVarLayoutForLegalizedGlobalParam(
     GLSLLegalizationContext* context,
     IRInst* globalParam,
@@ -1845,6 +1871,14 @@ ScalarizedVal createSimpleGLSLGlobalVarying(
         //
         sharedGlobalArrayInfoForSystemValue->addIndex(systemValueInfo->arrayIndex);
 
+        // The shared global may already exist for a non-precise sibling (for example
+        // `SV_ClipDistance0`), so a `precise` parameter mapping to another index marks it here.
+        maybeAddPreciseDecorationForOutputVarying(
+            builder,
+            sharedGlobalArrayInfoForSystemValue->globalParam,
+            kind,
+            outerParamInfo);
+
         // We need to package up a `ScalarizedVal` to represent this shader parameter.
         // The global parameter that was allocated above is already a pointer to an
         // array, so it might seem like we could simply emit a `getElementPtr` and
@@ -1901,6 +1935,7 @@ ScalarizedVal createSimpleGLSLGlobalVarying(
             declarator,
             outerParamInfo,
             systemValueInfo);
+        maybeAddPreciseDecorationForOutputVarying(builder, legalizedParamPtr, kind, outerParamInfo);
     }
 
     // At this point we've created the `legalizedParamVal` that will
