@@ -7158,19 +7158,33 @@ struct ExprLoweringVisitorBase : public ExprVisitor<Derived, LoweredValInfo>
         }
 
         // A scalar typed `select` expr will turn into an if-else to implement short circuiting
-        // semantics.
+        // semantics. Like an `if`/`else`, that if-else is a branch site whose true and false
+        // arms are attributed to the condition.
         auto builder = context->irBuilder;
         auto thenBlock = builder->createBlock();
         auto elseBlock = builder->createBlock();
         auto afterBlock = builder->createBlock();
-        auto irCond = getSimpleVal(context, lowerRValueExpr(context, expr->arguments[0]));
+        auto condExpr = expr->arguments[0];
+        auto irCond = getSimpleVal(context, lowerRValueExpr(context, condExpr));
+        uint32_t coverageBranchSiteID =
+            context->traceBranchCoverage ? context->allocateCoverageBranchSiteID() : 0;
         builder->emitIfElse(irCond, thenBlock, elseBlock, afterBlock);
         builder->insertBlock(thenBlock);
         builder->setInsertInto(thenBlock);
+        context->emitBranchCoverageMarker(
+            condExpr->loc,
+            coverageBranchSiteID,
+            1,
+            slang::CoverageBranchArmKind::TrueArm);
         auto trueVal = getSimpleVal(context, lowerRValueExpr(context, expr->arguments[1]));
         builder->emitBranch(afterBlock, 1, &trueVal);
         builder->insertBlock(elseBlock);
         builder->setInsertInto(elseBlock);
+        context->emitBranchCoverageMarker(
+            condExpr->loc,
+            coverageBranchSiteID,
+            2,
+            slang::CoverageBranchArmKind::FalseArm);
         auto falseVal = getSimpleVal(context, lowerRValueExpr(context, expr->arguments[2]));
         builder->emitBranch(afterBlock, 1, &falseVal);
         builder->insertBlock(afterBlock);
@@ -7186,9 +7200,20 @@ struct ExprLoweringVisitorBase : public ExprVisitor<Derived, LoweredValInfo>
         auto thenBlock = builder->createBlock();
         auto elseBlock = builder->createBlock();
         auto afterBlock = builder->createBlock();
-        auto irCond = getSimpleVal(context, lowerRValueExpr(context, expr->arguments[0]));
+        auto leftExpr = expr->arguments[0];
+        auto irCond = getSimpleVal(context, lowerRValueExpr(context, leftExpr));
 
         maybeEmitDebugLine(context, nullptr, nullptr, irCond->sourceLoc, true);
+
+        // The left operand decides whether the right operand is evaluated, so the if-else
+        // below is a branch site whose arms are the left operand's true and false outcomes.
+        // An initializer such as `static bool g = a && b;` lowers into the global rather than
+        // a function body, and the coverage pass only instruments function bodies, so that
+        // if-else is not a site.
+        uint32_t coverageBranchSiteID =
+            context->traceBranchCoverage && getParentFunc(builder->getInsertLoc().getInst())
+                ? context->allocateCoverageBranchSiteID()
+                : 0;
 
         // ifElse(<first param>, %true-block, %false-block, %after-block)
         builder->emitIfElse(irCond, thenBlock, elseBlock, afterBlock);
@@ -7198,6 +7223,14 @@ struct ExprLoweringVisitorBase : public ExprVisitor<Derived, LoweredValInfo>
         builder->insertBlock(thenBlock);
         builder->setInsertInto(thenBlock);
         maybeEmitDebugLine(context, nullptr, nullptr, irCond->sourceLoc, true);
+        if (coverageBranchSiteID != 0)
+        {
+            context->emitBranchCoverageMarker(
+                leftExpr->loc,
+                coverageBranchSiteID,
+                1,
+                slang::CoverageBranchArmKind::TrueArm);
+        }
         auto trueVal = expr->flavor == LogicOperatorShortCircuitExpr::Flavor::And
                            ? getSimpleVal(context, lowerRValueExpr(context, expr->arguments[1]))
                            : LoweredValInfo::simple(context->irBuilder->getBoolValue(true)).val;
@@ -7209,6 +7242,14 @@ struct ExprLoweringVisitorBase : public ExprVisitor<Derived, LoweredValInfo>
         builder->insertBlock(elseBlock);
         builder->setInsertInto(elseBlock);
         maybeEmitDebugLine(context, nullptr, nullptr, irCond->sourceLoc, true);
+        if (coverageBranchSiteID != 0)
+        {
+            context->emitBranchCoverageMarker(
+                leftExpr->loc,
+                coverageBranchSiteID,
+                2,
+                slang::CoverageBranchArmKind::FalseArm);
+        }
         auto falseVal = expr->flavor == LogicOperatorShortCircuitExpr::Flavor::And
                             ? LoweredValInfo::simple(context->irBuilder->getBoolValue(false)).val
                             : getSimpleVal(context, lowerRValueExpr(context, expr->arguments[1]));
