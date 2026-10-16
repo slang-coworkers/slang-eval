@@ -1880,7 +1880,6 @@ struct PeepholeContext : InstPassBase
         case kIROp_IsUnsignedInt:
         case kIROp_IsSignedInt:
         case kIROp_IsBool:
-        case kIROp_IsVector:
         case kIROp_IsBindlessTextureNVEncodable:
             {
                 auto type = inst->getOperand(0)->getDataType();
@@ -1915,14 +1914,28 @@ struct PeepholeContext : InstPassBase
                     case kIROp_IsSignedInt:
                         result = isIntegralType(type) && getIntTypeSigned(type);
                         break;
-                    case kIROp_IsVector:
-                        result = as<IRVectorType>(type);
-                        break;
                     case kIROp_IsBindlessTextureNVEncodable:
                         result = isBindlessTextureNVEncodableResourceType(type);
                         break;
                     }
                     inst->replaceUsesWith(builder.getBoolValue(result));
+                    maybeRemoveOldInst(inst);
+                    changed = true;
+                }
+                break;
+            }
+        case kIROp_IsVector:
+            {
+                // Unlike the scalar-kind predicates above, which answer for the element type of a
+                // vector or matrix, `IsVector` asks about the shape of the queried type itself.
+                auto type = inst->getOperand(0)->getDataType();
+                if (isConcreteType(type))
+                {
+                    IRBuilder builder(module);
+                    IRBuilderSourceLocRAII srcLocRAII(&builder, inst->sourceLoc);
+                    builder.setInsertBefore(inst);
+
+                    inst->replaceUsesWith(builder.getBoolValue(as<IRVectorType>(type) != nullptr));
                     maybeRemoveOldInst(inst);
                     changed = true;
                 }
