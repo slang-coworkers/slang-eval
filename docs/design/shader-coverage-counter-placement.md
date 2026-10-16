@@ -231,13 +231,12 @@ Branch coverage inserts counters at selected control-flow arm entry
 points. It answers "which branch outcome was selected?" It does not
 insert counters before every statement inside the selected arm.
 
-The current scope is source statement/control-flow coverage for:
-`if`/`else`, `for`/`while`/`do while` loop-condition outcomes, and
-`switch` case/default dispatch arms. Expression-level control flow,
-including short-circuit `&&` / `||` and ternary `?:`, is intentionally
-not instrumented by this mode yet. `return`, `break`, and `continue`
-are represented through the branch arm that reaches them rather than
-as separate branch entries.
+The current scope is source control-flow coverage for: `if`/`else`,
+`for`/`while`/`do while` loop-condition outcomes, `switch` case/default
+dispatch arms, scalar ternary `?:` conditions, and the left operand of
+short-circuiting `&&` / `||`. `return`, `break`, and `continue` are
+represented through the branch arm that reaches them rather than as
+separate branch entries.
 
 ### If / Else
 
@@ -431,6 +430,74 @@ body_default:
 If a switch has no `default`, branch coverage creates a synthetic
 no-match default arm so the report can distinguish "no case matched"
 from "the switch was not reached."
+
+### Ternary and Short-Circuit Expressions
+
+A scalar `?:`, `&&`, or `||` evaluates one of its operands only
+conditionally, and lowering turns it into the same kind of if-else as an
+`if` statement. Each one is a branch site with a true and a false arm.
+Consider this example:
+
+```slang
+uint picked = (t == 3u) ? 10u : 20u;
+bool both = (t != 0u) && (t != 2u);
+bool either = (t == 1u) || (t == 2u);
+```
+
+It is conceptually:
+
+```slang
+uint picked;
+if (t == 3u)
+{
+    coverageAtomic("branch: ?: condition true");
+    picked = 10u;
+}
+else
+{
+    coverageAtomic("branch: ?: condition false");
+    picked = 20u;
+}
+
+bool both;
+if (t != 0u)
+{
+    coverageAtomic("branch: && left operand true");
+    both = (t != 2u);
+}
+else
+{
+    coverageAtomic("branch: && left operand false");
+    both = false;
+}
+
+bool either;
+if (t == 1u)
+{
+    coverageAtomic("branch: || left operand true");
+    either = true;
+}
+else
+{
+    coverageAtomic("branch: || left operand false");
+    either = (t == 2u);
+}
+```
+
+The `?:` arms are attributed to the condition, and the `&&` / `||` arms
+to the left operand, because that operand decides whether the right
+operand is evaluated. A chain such as `(a && b) || c` has one site per
+operator. The outcome of the last right operand (`b` in `a && b`) has
+no entry of its own: recording it in `bool r = a && b;` would need extra
+control flow in the shader. When the expression is the condition of an
+`if` or a loop, that statement's site records the outcome.
+
+Forms that do not branch get no entries: a `?:` with a vector
+condition, `&&` / `||` on vectors, and `&&` / `||` under
+`-disable-short-circuit` evaluate every operand and combine the results
+without control flow. An expression in a global initializer, such as
+`static bool g = a && b;`, is outside any function body and is not
+instrumented.
 
 ## Combined Function and Branch Coverage
 

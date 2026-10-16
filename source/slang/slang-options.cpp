@@ -643,9 +643,9 @@ void initCommandOptions(CommandOptions& options)
          "-trace-branch-coverage",
          nullptr,
          "Instrument the shader with per-branch-arm coverage counters for "
-         "if/else, loop-condition, switch case/default arms, and switch no-match "
-         "default paths. Expression-level short-circuit and ternary branches are "
-         "not instrumented by this mode yet. "
+         "if/else, loop-condition, switch case/default arms, switch no-match "
+         "default paths, scalar \"?:\" conditions, and the left operand of "
+         "short-circuiting \"&&\" and \"||\" operations. "
          "Shares the synthesized `__slang_coverage` buffer and coverage metadata path."},
         {OptionKind::TraceCoverageBoolean,
          "-trace-coverage-boolean",

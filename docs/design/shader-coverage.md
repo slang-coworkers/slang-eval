@@ -134,8 +134,9 @@ counters are inserted, with examples, see
      loop-condition true/false arms (`for`, `while`, `do while`) and
      source `switch` case/default dispatch arms, including the
      implicit no-match default path when no `default` label exists.
-     Expression-level short-circuit and ternary branches are not
-     instrumented yet.
+     The scalar `?:` and short-circuiting `&&` / `||` expression
+     visitors emit the same true/false arm markers for the branch they
+     lower to.
    - Marker ops are opaque void IR instructions. They do not reference
      a buffer at this point; the IR coverage pass rewrites them later.
    - The marker source position rides on the standard per-instruction
