@@ -181,6 +181,12 @@ struct AddressInstEliminationContext
                 case kIROp_GetOffsetPtr:
                     break;
                 default:
+                    // An atomic reads and modifies its memory in place, so its address operand
+                    // has no value form to rewrite into and the use stays as is. An address that
+                    // is not a valid atomic destination is still diagnosed later, by
+                    // `validateAtomicOperations`.
+                    if (as<IRAtomicOperation>(use->getUser()))
+                        break;
                     sink->diagnose(Diagnostics::UnsupportedUseOfLValueForAutoDiff{
                         .location = use->getUser()->sourceLoc,
                     });

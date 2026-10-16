@@ -2813,6 +2813,11 @@ struct ForwardDiffTranslationContext
             break;
         }
 
+        // Atomics operate on device, `groupshared` or texture memory, none of which carries a
+        // derivative, so like a store to a buffer they are non-differentiable side effects.
+        if (as<IRAtomicOperation>(origInst))
+            return translateNonDiffInst(builder, origInst);
+
         return InstPair(nullptr, nullptr);
     }
 
