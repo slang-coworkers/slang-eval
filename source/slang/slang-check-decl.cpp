@@ -7522,6 +7522,64 @@ static void removeStaticLookupItems(LookupResult& lookupResult)
     }
 }
 
+// Returns the receiver type that a call to the non-static member `item` expects, where `item` was
+// found by a member lookup in `lookupType`, or null if `item` aliases a callable that is not a
+// function and so has no `this` to bind.
+//
+// An ordinary lookup result (with its breadcrumbs) is relative to the searched type, so it expects
+// a `lookupType` receiver. A `FuncAliasDecl` stands for its target, as in overload resolution, so
+// it expects the target's receiver. Consider this example:
+//
+//     struct A
+//     {
+//         [ForwardDerivative(f_fwd)] float f(float x) { ... }
+//         DifferentialPair<float> f_fwd(DifferentialPair<float> x) { ... }
+//     }
+//
+// The function type `A.f` conforms to `IForwardDifferentiable<A.f>` through an extension of `A.f`
+// whose non-static `fwd_diff` member aliases `A.f_fwd`. A call to that alias needs a receiver of
+// type `A`, not `A.f`.
+//
+static Type* getReceiverTypeOfLookupItem(
+    SemanticsVisitor* visitor,
+    LookupResultItem const& item,
+    Type* lookupType)
+{
+    auto aliasDeclRef = item.declRef.as<FuncAliasDecl>();
+    if (!aliasDeclRef)
+        return lookupType;
+
+    auto targetDeclRef = getResolvedFunc(aliasDeclRef).as<FunctionDeclBase>();
+    if (!targetDeclRef)
+        return nullptr;
+    return getTypeForThisExpr(visitor, targetDeclRef).type;
+}
+
+// Removes the items of `lookupResult`, a lookup of non-static members in `lookupType`, that cannot
+// be called on a receiver of type `receiverType`.
+static void removeLookupItemsWithOtherReceiverType(
+    SemanticsVisitor* visitor,
+    LookupResult& lookupResult,
+    Type* lookupType,
+    Type* receiverType)
+{
+    auto canonicalReceiverType = receiverType->getCanonicalType();
+    List<LookupResultItem> newItems;
+    for (auto item : lookupResult)
+    {
+        auto expectedType = getReceiverTypeOfLookupItem(visitor, item, lookupType);
+        if (expectedType && expectedType->getCanonicalType()->equals(canonicalReceiverType))
+            newItems.add(item);
+    }
+
+    lookupResult.items = newItems;
+    lookupResult.item = LookupResultItem();
+    if (lookupResult.items.getCount() > 0)
+    {
+        lookupResult.item = lookupResult.items[0];
+    }
+}
+
 // Returns true if declRef points to an interface method requirement that has a default
 // implementation.
 HasInterfaceDefaultImplModifier* hasDefaultImpl(DeclRef<Decl> declRef)
@@ -7666,11 +7724,22 @@ bool SemanticsVisitor::trySynthesizeMethodRequirementWitness(
         // Synthesized:
         //      static int $__syn_method(MyStruct val, int x) { return val.method(x); }
         //
+        // A non-static method whose receiver type differs from the first parameter's type is
+        // not a candidate, because binding that argument as `this` makes an ill-typed call.
+        // For example, a requirement `static float value(Packed p)` next to an instance
+        // `value()` of the conforming type is not satisfied by forwarding to `p.value()`; it
+        // uses its default implementation if it has one, and is reported as unsatisfied if not.
+        //
         if (!baseOverloadedExpr->lookupResult2.isValid() && synArgs.getCount() > 0)
         {
             // Restore the full lookup result and keep only non-static items.
             baseOverloadedExpr->lookupResult2 = lookupResult;
             removeStaticLookupItems(baseOverloadedExpr->lookupResult2);
+            removeLookupItemsWithOtherReceiverType(
+                this,
+                baseOverloadedExpr->lookupResult2,
+                context->conformingType,
+                synArgs[0]->type.type);
             if (baseOverloadedExpr->lookupResult2.isValid())
             {
                 nonStaticSatisfiesStatic = true;
