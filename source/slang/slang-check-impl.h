@@ -4493,6 +4493,10 @@ QualType getTypeForThisExpr(SemanticsVisitor* visitor, FunctionDeclBase* funcDec
 
 QualType getTypeForThisExpr(SemanticsVisitor* visitor, DeclRef<FunctionDeclBase> funcDeclRef);
 
+/// Returns the callable that `declRef` names, following `FuncAliasDecl` targets until a
+/// non-alias callable is reached.
+DeclRef<CallableDecl> getResolvedFunc(DeclRef<CallableDecl> declRef);
+
 bool isUnsizedArrayType(Type* type);
 
 bool isInterfaceType(Type* type);
