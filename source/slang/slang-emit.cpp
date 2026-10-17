@@ -79,6 +79,7 @@
 #include "slang-ir-liveness.h"
 #include "slang-ir-loop-unroll.h"
 #include "slang-ir-lower-append-consume-structured-buffer.h"
+#include "slang-ir-lower-array-builtin-cast.h"
 #include "slang-ir-lower-binding-query.h"
 #include "slang-ir-lower-bit-cast.h"
 #include "slang-ir-lower-buffer-element-type.h"
@@ -600,6 +601,12 @@ void calcRequiredLoweringPassSet(
         break;
     case kIROp_MatrixSwizzleStore:
         result.matrixSwizzleStore = true;
+        break;
+    case kIROp_BuiltinCast:
+        // The front end forms an array-typed `BuiltinCast` only for an array conversion that
+        // changes matrix layouts; `lowerArrayBuiltinCasts` expands it element-wise.
+        if (as<IRArrayType>(inst->getDataType()))
+            result.arrayBuiltinCast = true;
         break;
     case kIROp_Select:
         if (!isScalarOrVectorType(inst->getFullType()))
@@ -1596,6 +1603,12 @@ Result linkAndOptimizeIR(
     SLANG_PASS(eliminateDeadCode, deadCodeEliminationOptions);
 
     SLANG_PASS(finalizeSpecialization);
+
+    // Array conversions that change only matrix layouts are lowered after specialization, when
+    // every matrix layout has been resolved, so a conversion that turned out to be an identity
+    // (e.g. `row_major` with a row-major default) is dropped instead of copied element-wise.
+    if (requiredLoweringPassSet.arrayBuiltinCast)
+        SLANG_PASS(lowerArrayBuiltinCasts);
 
     // Lower DiffTypeInfo instructions to MakeTuple.
     // This must happen after specialization since DiffTypeInfo is hoistable.

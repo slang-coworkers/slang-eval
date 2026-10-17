@@ -1724,16 +1724,35 @@ bool SemanticsVisitor::isEnumToBuiltinScalarConversionEnabled(EnumDecl* enumDecl
     return translationUnit && translationUnit->sourceLanguage == SourceLanguage::HLSL;
 }
 
-/// Return true if `fromType` and `toType` are matrices with the same element type and dimensions,
-/// so that they differ at most in matrix layout.
+/// Return true if `fromType` and `toType` have the same shape and can differ only in matrix
+/// layout: either two matrices with the same element type and dimensions, or two sized arrays
+/// with the same element count whose element types satisfy this check recursively.
+///
+/// Consider `cbuffer Skin { row_major float4x4 bones[4]; }` passed to a `float4x4 b[4]`
+/// parameter. The argument has type `matrix<float,4,4,RowMajor>[4]` and the parameter
+/// `matrix<float,4,4,Unknown>[4]`, so the array converts exactly when its elements do.
+/// Unsized arrays are rejected because the conversion lowers to an element-wise copy
+/// (`lowerArrayBuiltinCasts`), which needs an element count.
 static bool isMatrixLayoutConversion(Type* toType, Type* fromType)
 {
-    auto fromMatrixType = as<MatrixExpressionType>(fromType);
-    auto toMatrixType = as<MatrixExpressionType>(toType);
-    return fromMatrixType && toMatrixType &&
-           fromMatrixType->getElementType()->equals(toMatrixType->getElementType()) &&
-           fromMatrixType->getRowCount()->equals(toMatrixType->getRowCount()) &&
-           fromMatrixType->getColumnCount()->equals(toMatrixType->getColumnCount());
+    if (auto fromMatrixType = as<MatrixExpressionType>(fromType))
+    {
+        auto toMatrixType = as<MatrixExpressionType>(toType);
+        return toMatrixType &&
+               fromMatrixType->getElementType()->equals(toMatrixType->getElementType()) &&
+               fromMatrixType->getRowCount()->equals(toMatrixType->getRowCount()) &&
+               fromMatrixType->getColumnCount()->equals(toMatrixType->getColumnCount());
+    }
+    if (auto fromArrayType = as<ArrayExpressionType>(fromType))
+    {
+        auto toArrayType = as<ArrayExpressionType>(toType);
+        return toArrayType && !fromArrayType->isUnsized() && !toArrayType->isUnsized() &&
+               fromArrayType->getElementCount()->equals(toArrayType->getElementCount()) &&
+               isMatrixLayoutConversion(
+                   toArrayType->getElementType(),
+                   fromArrayType->getElementType());
+    }
+    return false;
 }
 
 bool SemanticsVisitor::_coerce(
@@ -1928,6 +1947,30 @@ bool SemanticsVisitor::_coerce(
                         *outToExpr = fromExpr;
                     if (outCost)
                         *outCost = kConversionCost_SizedArrayToUnsizedArray;
+                    return true;
+                }
+
+                // A sized array whose elements differ only in matrix layout is first
+                // converted to a sized array of the parameter's element type, which then
+                // passes to the unsized parameter as above.
+                if (toArrayType->isUnsized() && !fromArrayType->isUnsized() &&
+                    isMatrixLayoutConversion(
+                        toArrayType->getElementType(),
+                        fromArrayType->getElementType()))
+                {
+                    if (outToExpr)
+                    {
+                        auto castExpr = getASTBuilder()->create<BuiltinCastExpr>();
+                        castExpr->type = getASTBuilder()->getArrayType(
+                            toArrayType->getElementType(),
+                            fromArrayType->getElementCount());
+                        castExpr->loc = fromExpr->loc;
+                        castExpr->base = fromExpr;
+                        *outToExpr = castExpr;
+                    }
+                    if (outCost)
+                        *outCost =
+                            kConversionCost_SizedArrayToUnsizedArray + kConversionCost_MatrixLayout;
                     return true;
                 }
             }
@@ -2324,7 +2367,6 @@ bool SemanticsVisitor::_coerce(
         }
     }
 
-    // Matrix types with different layouts are convertible.
     if (isMatrixLayoutConversion(toType, fromType))
     {
         if (outCost)
