@@ -68,29 +68,26 @@ jobs:
             -expected-failure-list tests/expected-failure-no-gpu.txt -expected-failure-list tests/expected-failure-linux.txt \
             -skip-reference-image-generation "${changed[@]}"
 
-      - name: Run the task's reference tests from the bank
-        # The real signal: the regression tests the maintainers' own fix shipped with,
-        # taken from slang-eval-tasks for the task named in the branch. They overwrite
-        # anything the agent wrote at the same paths, so the agent cannot pass by editing
-        # expected outputs. Any failing reference file fails the job. GPU-bound files are
-        # skipped, since this runner has no GPU.
+      - name: Run the task's reference tests
+        # The real signal: the regression tests the maintainers' own fix shipped with.
+        # They live on this fork's master under .eval/fixer/<task>/ (vendored from the
+        # private slang-eval-tasks bank) and overwrite anything the agent wrote at the
+        # same paths, so the agent cannot pass by editing expected outputs. Any failing
+        # reference file fails the job. GPU-bound files are not listed, since this
+        # runner has no GPU.
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           export SLANG_DISABLE_AVX512=1
           n=$(grep -oE 'slang-[0-9]+' <<<"$HEAD_REF" | head -1 | cut -d- -f2)
           if [[ -z "$n" ]]; then echo "no task id in branch '$HEAD_REF'; nothing to check"; exit 0; fi
-          git clone -q --depth 1 https://github.com/slang-coworkers/slang-eval-tasks /tmp/bank
-          task=/tmp/bank/tasks/fixer/slang-$n
-          if [[ ! -d "$task" ]]; then echo "::error::no fixer task slang-$n in the bank"; exit 1; fi
-          cp -R "$task/tests/reference/." .
-          mapfile -t files < <(python3 - "$task/task.toml" <<'PY'
-          import sys, tomllib
-          md = tomllib.load(open(sys.argv[1], "rb"))["metadata"]
-          gpu = set(md.get("gpu_tests", []))
-          print("\n".join(f for f in md["runnable_tests"] if f not in gpu))
-          PY
-          )
+          git fetch -q --depth 1 origin master
+          rm -rf /tmp/eval && mkdir -p /tmp/eval
+          git archive FETCH_HEAD .eval | tar -x -C /tmp/eval
+          task=/tmp/eval/.eval/fixer/slang-$n
+          if [[ ! -d "$task" ]]; then echo "::error::no reference material for slang-$n under .eval on master"; exit 1; fi
+          cp -R "$task/reference/." .
+          mapfile -t files < <(grep -v '^\s*$' "$task/files.txt")
           if [[ ${#files[@]} -eq 0 ]]; then echo "::warning::every reference test of slang-$n needs a GPU; nothing runnable here"; exit 0; fi
           printf 'reference test: %s\n' "${files[@]}"
           ./build/Release/bin/slang-test -v -api cpu+llvm "${files[@]}" > reference-tests.log 2>&1 || true
