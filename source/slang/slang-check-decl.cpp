@@ -11917,6 +11917,11 @@ bool SemanticsVisitor::checkInterfaceConformance(
             continue;
         if (as<InterfaceDefaultImplDecl>(requiredMemberDecl.getDecl()))
             continue;
+        // An `EmptyDecl` declares nothing, so it is not a requirement even when wrapped in a
+        // generic; IR lowering's `shouldDeclBeTreatedAsInterfaceRequirement` agrees. A stray `;`
+        // in an interface body, as in `property float3 X { get; };`, is the usual source of one.
+        if (as<EmptyDecl>(maybeGetInner(requiredMemberDecl.getDecl())))
+            continue;
         ensureDecl(requiredMemberDecl, DeclCheckState::ReadyForReference);
         // Validate attributes on empty declarations before skipping them as requirements.
         if (as<EmptyDecl>(requiredMemberDecl.getDecl()))
