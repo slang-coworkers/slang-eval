@@ -1,0 +1,71 @@
+# Eval CI for slang-coworkers/slang-eval, the fork the eval fixer coworker opens its
+# PRs on. One GitHub-hosted Linux job builds Slang in Release and runs the CPU test
+# suite the way upstream's test-linux-release-gcc-x86_64-cpu tier does. It runs on
+# draft PRs too, because every eval PR is a draft. The eval runner reads the check
+# run named "eval-ci" on the PR head as the trial's reward: success → 1, failure → 0.
+name: Eval CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: eval-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  eval-ci:
+    name: eval-ci
+    runs-on: ubuntu-22.04
+    timeout-minutes: 170
+    steps:
+      - name: Check out the PR head
+        # The head commit, not the merge with the fork's master: the fixer's branch
+        # starts from the task's recorded base commit and must be judged as it is.
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libx11-dev
+          cmake --version
+          ninja --version
+
+      - name: Configure and build Release
+        run: |
+          cmake --preset default --fresh
+          cmake --build --preset release > build.log 2>&1 || { tail -200 build.log; exit 1; }
+
+      - name: Run the tests the PR adds or changes
+        # Quick, loud signal before the full suite: every .slang file under tests/
+        # that differs from the fork's master tip.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          export SLANG_DISABLE_AVX512=1
+          if [[ -z "$BASE_SHA" ]]; then echo "no PR base; skipping"; exit 0; fi
+          git fetch --no-tags origin "$BASE_SHA" || true
+          base=$(git merge-base "$BASE_SHA" HEAD || echo "$BASE_SHA")
+          mapfile -t changed < <(git diff --name-only "$base" HEAD -- tests | grep -E '\.slang$' || true)
+          if [[ ${#changed[@]} -eq 0 ]]; then echo "no changed .slang tests"; exit 0; fi
+          printf 'changed test: %s\n' "${changed[@]}"
+          ./build/Release/bin/slang-test -api cpu+llvm -expected-failure-list tests/expected-failure-github.txt \
+            -expected-failure-list tests/expected-failure-no-gpu.txt -expected-failure-list tests/expected-failure-linux.txt \
+            -skip-reference-image-generation "${changed[@]}"
+
+      - name: Run the CPU test suite
+        run: |
+          export SLANG_DISABLE_AVX512=1
+          ./build/Release/bin/slang-test -api cpu+llvm -use-test-server -server-count 4 \
+            -expected-failure-list tests/expected-failure-github.txt \
+            -expected-failure-list tests/expected-failure-no-gpu.txt \
+            -expected-failure-list tests/expected-failure-linux.txt \
+            -skip-reference-image-generation -show-adapter-info
