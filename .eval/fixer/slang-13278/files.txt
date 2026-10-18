@@ -1,0 +1,1 @@
+tests/language-feature/coverage/coverage-branch-expression-scope.slang

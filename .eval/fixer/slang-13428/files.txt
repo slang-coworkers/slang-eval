@@ -1,0 +1,2 @@
+tests/diagnostics/multi-declarator.slang
+tests/language-feature/multi-declarator-earlier-declarator.slang

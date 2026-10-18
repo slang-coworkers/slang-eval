@@ -1,0 +1,7 @@
+tests/diagnostics/slang-class-instantiation.slang
+tests/hlsl/class-buffer-element.hlsl
+tests/hlsl/class-global-layout.hlsl
+tests/hlsl/class-inheritance.hlsl
+tests/hlsl/class-invalid-nesting.hlsl
+tests/hlsl/class-struct-grammar.hlsl
+tests/hlsl/class-value-type.hlsl

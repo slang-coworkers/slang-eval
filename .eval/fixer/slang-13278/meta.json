@@ -1,0 +1,9 @@
+{
+ "issue": 13278,
+ "fix_pr": 13279,
+ "base_commit": "fd923329eec78ccede67837f7dbeaac582f61f8a",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/language-feature/coverage/coverage-branch-expression-scope.slang"
+ ]
+}

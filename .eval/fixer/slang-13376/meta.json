@@ -1,0 +1,13 @@
+{
+ "issue": 13376,
+ "fix_pr": 13378,
+ "base_commit": "c538debef6fb210db27ea9aa12103e2a394b2dc9",
+ "gpu_tests": [
+  "tests/language-feature/types/matrix-layout-array-coerce.slang"
+ ],
+ "reference_tests": [
+  "tests/language-feature/types/matrix-layout-array-coerce-forms.slang",
+  "tests/language-feature/types/matrix-layout-array-coerce-overload.slang",
+  "tests/language-feature/types/matrix-layout-array-coerce.slang"
+ ]
+}

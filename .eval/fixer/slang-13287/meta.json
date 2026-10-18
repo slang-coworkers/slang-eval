@@ -1,0 +1,9 @@
+{
+ "issue": 13287,
+ "fix_pr": 13290,
+ "base_commit": "68563d2f33818480f4c67c8a1f183c68cf38e51c",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/spirv/precise-output-nocontraction.slang"
+ ]
+}

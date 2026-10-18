@@ -1,0 +1,10 @@
+{
+ "issue": 13265,
+ "fix_pr": 13437,
+ "base_commit": "ef7e6dcf1deab0cc76e6b2cdf1fb4580eb17e5b0",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/cuda/optix-geometry-index.slang",
+  "tests/cuda/optix-intrinsics-comprehensive.slang"
+ ]
+}

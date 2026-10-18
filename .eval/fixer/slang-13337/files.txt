@@ -1,0 +1,2 @@
+tests/diagnostics/interface-empty-decl-missing-member.slang
+tests/diagnostics/interface-empty-decl-modifier.slang

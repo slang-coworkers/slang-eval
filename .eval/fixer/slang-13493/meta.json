@@ -1,0 +1,10 @@
+{
+ "issue": 13493,
+ "fix_pr": 13494,
+ "base_commit": "fd9e65824714e83bb5e6feeced962b0ef307779a",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/reflection/mesh-thread-group-size.slang",
+  "tests/workgraphs/reflection-thread-group-size.slang"
+ ]
+}

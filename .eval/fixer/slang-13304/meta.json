@@ -1,0 +1,9 @@
+{
+ "issue": 13304,
+ "fix_pr": 13477,
+ "base_commit": "f6238cee3b4c9cc3625950075f92c1cffa7cfd8e",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/diagnostics/container-output-write-failure.slang"
+ ]
+}

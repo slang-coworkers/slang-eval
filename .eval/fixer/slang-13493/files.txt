@@ -1,0 +1,2 @@
+tests/reflection/mesh-thread-group-size.slang
+tests/workgraphs/reflection-thread-group-size.slang

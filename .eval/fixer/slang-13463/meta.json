@@ -1,0 +1,16 @@
+{
+ "issue": 13463,
+ "fix_pr": 13475,
+ "base_commit": "f7e14a1a6276f5a0245a725b56ee20471bdd69a1",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/language-server/config-null/format-on-type-null.slang",
+  "tests/language-server/config-null/include-pull-null.slang",
+  "tests/language-server/config-null/include-pull-value-false.slang",
+  "tests/language-server/config-null/include-pull-value-true.slang",
+  "tests/language-server/config-null/include-push-null.slang",
+  "tests/language-server/config-null/include-repull-null.slang",
+  "tests/language-server/config-null/inlay-sibling.slang",
+  "tests/language-server/config-null/lib/configNullHelper.slang"
+ ]
+}

@@ -1,0 +1,3 @@
+tests/autodiff/float-atomic-in-differentiable-function.slang
+tests/autodiff/interlocked-in-differentiable-function.slang
+tests/language-feature/coverage/coverage-autodiff.slang

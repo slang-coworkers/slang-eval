@@ -1,0 +1,11 @@
+{
+ "issue": 13436,
+ "fix_pr": 13450,
+ "base_commit": "64c06dae148a9ef33061bae52ed4e0b31773c611",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/cuda/nvrtc-architecture-override.slang",
+  "tests/diagnostics/command-line/x-arg-trailing-x.slang",
+  "tests/spirv/cmd-arg-debug-info.slang"
+ ]
+}

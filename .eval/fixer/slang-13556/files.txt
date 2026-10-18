@@ -1,0 +1,3 @@
+tests/diagnostics/cuda-half-texture-sample-grad.slang
+tests/diagnostics/cuda-sample-grad-unsupported-overloads.slang
+tests/hlsl-intrinsic/texture-sample-grad-cuda.slang

@@ -1,0 +1,1 @@
+tests/language-feature/generics/is-vector-builtin-13354.slang

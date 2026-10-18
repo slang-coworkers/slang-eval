@@ -1,0 +1,13 @@
+{
+ "issue": 13337,
+ "fix_pr": 13367,
+ "base_commit": "92258f61b74d3edf6a342eb2f308c9d07ffb154c",
+ "gpu_tests": [
+  "tests/language-feature/interfaces/interface-empty-decl.slang"
+ ],
+ "reference_tests": [
+  "tests/diagnostics/interface-empty-decl-missing-member.slang",
+  "tests/diagnostics/interface-empty-decl-modifier.slang",
+  "tests/language-feature/interfaces/interface-empty-decl.slang"
+ ]
+}

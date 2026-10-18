@@ -1,0 +1,3 @@
+tests/cuda/nvrtc-architecture-override.slang
+tests/diagnostics/command-line/x-arg-trailing-x.slang
+tests/spirv/cmd-arg-debug-info.slang

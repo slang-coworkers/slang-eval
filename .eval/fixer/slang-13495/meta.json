@@ -1,0 +1,15 @@
+{
+ "issue": 13495,
+ "fix_pr": 13497,
+ "base_commit": "e2e217dd24fc661388ebf8fd7c28a4c5b8c2bf5b",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/diagnostics/slang-class-instantiation.slang",
+  "tests/hlsl/class-buffer-element.hlsl",
+  "tests/hlsl/class-global-layout.hlsl",
+  "tests/hlsl/class-inheritance.hlsl",
+  "tests/hlsl/class-invalid-nesting.hlsl",
+  "tests/hlsl/class-struct-grammar.hlsl",
+  "tests/hlsl/class-value-type.hlsl"
+ ]
+}

@@ -1,0 +1,9 @@
+{
+ "issue": 13354,
+ "fix_pr": 13357,
+ "base_commit": "4c584ef671a6ce772585da74cea5f5c0aaf9edd1",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/language-feature/generics/is-vector-builtin-13354.slang"
+ ]
+}

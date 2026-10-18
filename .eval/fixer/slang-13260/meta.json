@@ -1,0 +1,11 @@
+{
+ "issue": 13260,
+ "fix_pr": 13269,
+ "base_commit": "92ef2caae435a257f821149626d231ed20e43478",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/language-feature/interfaces/gh-13260.slang",
+  "tests/language-feature/interfaces/static-default-adapted-instance-override.slang",
+  "tests/language-feature/interfaces/static-nonreceiver-no-default.slang"
+ ]
+}

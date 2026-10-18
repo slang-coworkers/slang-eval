@@ -1,0 +1,3 @@
+tests/language-feature/interfaces/gh-13260.slang
+tests/language-feature/interfaces/static-default-adapted-instance-override.slang
+tests/language-feature/interfaces/static-nonreceiver-no-default.slang

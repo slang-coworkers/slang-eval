@@ -1,0 +1,9 @@
+{
+ "issue": 13336,
+ "fix_pr": 13366,
+ "base_commit": "c43281adccb020c09a5ae4d2001c146e85278c65",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/diagnostics/property-type-modifiers.slang"
+ ]
+}

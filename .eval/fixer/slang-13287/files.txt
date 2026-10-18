@@ -1,0 +1,1 @@
+tests/spirv/precise-output-nocontraction.slang

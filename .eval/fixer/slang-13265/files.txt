@@ -1,0 +1,2 @@
+tests/cuda/optix-geometry-index.slang
+tests/cuda/optix-intrinsics-comprehensive.slang

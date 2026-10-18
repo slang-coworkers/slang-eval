@@ -1,0 +1,11 @@
+{
+ "issue": 13488,
+ "fix_pr": 13503,
+ "base_commit": "ae6d6993528fd65c41ae97e086b884adfecdc30f",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/language-feature/error-handling/try-erroneous-overloaded-callee.slang",
+  "tests/language-feature/error-handling/try-generic-error-type.slang",
+  "tests/language-feature/error-handling/try-non-throwing-callee.slang"
+ ]
+}

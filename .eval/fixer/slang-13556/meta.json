@@ -1,0 +1,11 @@
+{
+ "issue": 13556,
+ "fix_pr": 13559,
+ "base_commit": "788be3144ec9590322f5bbaa55296561a2cb4ad7",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/diagnostics/cuda-half-texture-sample-grad.slang",
+  "tests/diagnostics/cuda-sample-grad-unsupported-overloads.slang",
+  "tests/hlsl-intrinsic/texture-sample-grad-cuda.slang"
+ ]
+}

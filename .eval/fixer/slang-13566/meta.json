@@ -1,0 +1,11 @@
+{
+ "issue": 13566,
+ "fix_pr": 13569,
+ "base_commit": "705c5d8c83898f94e9b9b06c58ff2bac89e2b4ea",
+ "gpu_tests": [
+  "tests/wgsl/comparison-in-argument-list.slang"
+ ],
+ "reference_tests": [
+  "tests/wgsl/comparison-in-argument-list.slang"
+ ]
+}

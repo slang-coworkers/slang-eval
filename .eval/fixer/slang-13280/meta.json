@@ -1,0 +1,14 @@
+{
+ "issue": 13280,
+ "fix_pr": 13281,
+ "base_commit": "3bb522221d5db85fbdf8dcf441c05ffc3b801358",
+ "gpu_tests": [
+  "tests/autodiff/atomic-in-differentiable-function.slang"
+ ],
+ "reference_tests": [
+  "tests/autodiff/atomic-in-differentiable-function.slang",
+  "tests/autodiff/float-atomic-in-differentiable-function.slang",
+  "tests/autodiff/interlocked-in-differentiable-function.slang",
+  "tests/language-feature/coverage/coverage-autodiff.slang"
+ ]
+}

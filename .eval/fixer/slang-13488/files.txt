@@ -1,0 +1,3 @@
+tests/language-feature/error-handling/try-erroneous-overloaded-callee.slang
+tests/language-feature/error-handling/try-generic-error-type.slang
+tests/language-feature/error-handling/try-non-throwing-callee.slang

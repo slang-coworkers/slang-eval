@@ -1,0 +1,2 @@
+tests/language-feature/types/matrix-layout-array-coerce-forms.slang
+tests/language-feature/types/matrix-layout-array-coerce-overload.slang

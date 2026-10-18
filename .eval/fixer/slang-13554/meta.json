@@ -1,0 +1,9 @@
+{
+ "issue": 13554,
+ "fix_pr": 13563,
+ "base_commit": "0b8d2df7501bd338a66445943f37e2a83c6054da",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/cuda/rw-texture-layered-format-write.slang"
+ ]
+}

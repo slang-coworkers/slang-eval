@@ -1,0 +1,7 @@
+tests/language-server/config-null/format-on-type-null.slang
+tests/language-server/config-null/include-pull-null.slang
+tests/language-server/config-null/include-pull-value-false.slang
+tests/language-server/config-null/include-pull-value-true.slang
+tests/language-server/config-null/include-push-null.slang
+tests/language-server/config-null/include-repull-null.slang
+tests/language-server/config-null/inlay-sibling.slang

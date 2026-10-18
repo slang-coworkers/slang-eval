@@ -1,0 +1,1 @@
+tests/diagnostics/container-output-write-failure.slang

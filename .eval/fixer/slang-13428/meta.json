@@ -1,0 +1,10 @@
+{
+ "issue": 13428,
+ "fix_pr": 13432,
+ "base_commit": "2aa4915c321bbf61d9acd77010b6ec2e59a1188b",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/diagnostics/multi-declarator.slang",
+  "tests/language-feature/multi-declarator-earlier-declarator.slang"
+ ]
+}

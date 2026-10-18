@@ -1,0 +1,9 @@
+{
+ "issue": 13426,
+ "fix_pr": 13429,
+ "base_commit": "6ba151dcfc06db9ebe29bcb4159c0099a8ba1ab0",
+ "gpu_tests": [],
+ "reference_tests": [
+  "tests/bugs/gh-13426.slang"
+ ]
+}
