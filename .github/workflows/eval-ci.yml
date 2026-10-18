@@ -3,10 +3,17 @@
 # suite the way upstream's test-linux-release-gcc-x86_64-cpu tier does. It runs on
 # draft PRs too, because every eval PR is a draft. The eval runner reads the check
 # run named "eval-ci" on the PR head as the trial's reward: success → 1, failure → 0.
+#
+# The trigger is pull_request_target, not pull_request: a fixer branch starts from the
+# task's base commit, which is usually newer than the fork's master and often conflicts
+# with it, and GitHub does not run pull_request workflows for a PR with a merge
+# conflict. pull_request_target runs from the base branch regardless, and the job
+# checks out the PR head commit explicitly. Only this fork's own eval bot opens PRs
+# here, and the token is read-only.
 name: Eval CI
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
